@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commitResponse, createFrameState } from '../src/frame';
+import { commitResponse, createFrameState, resizeFrameState } from '../src/frame';
 import type { RenderResponse } from '../src/types';
 
 const response = (seq: number, width: number, height: number, id: number): RenderResponse => {
@@ -44,5 +44,23 @@ describe('stale worker frame competition', () => {
 
     expect(commitResponse(state, response(2, 3, 2, 20))).toBe(true);
     expect(state.frame?.width).toBe(3);
+  });
+
+  it('invalidates the committed frame synchronously on resize', () => {
+    const state = createFrameState(4, 4);
+    state.seq = 1;
+    expect(commitResponse(state, response(1, 4, 4, 11))).toBe(true);
+
+    resizeFrameState(state, 2, 2);
+    expect(state.frame).toBe(null);
+
+    // Late responses from before the resize can no longer commit, even
+    // when their generation happens to match the bumped one.
+    expect(commitResponse(state, response(1, 4, 4, 12))).toBe(false);
+    expect(commitResponse(state, response(2, 4, 4, 13))).toBe(false);
+    expect(state.frame).toBe(null);
+
+    expect(commitResponse(state, response(2, 2, 2, 14))).toBe(true);
+    expect(state.frame?.primitiveId[0]).toBe(14);
   });
 });

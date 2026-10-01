@@ -2,6 +2,7 @@ import {
   commitResponse,
   createFrameState,
   pickPrimitiveId,
+  resizeFrameState,
   type CommittedFrame,
   type FrameCommitState,
 } from './frame';
@@ -99,6 +100,10 @@ export class TriangleViewer {
     this.canvas.height = nextHeight;
     this.imageData = this.ctx2d.createImageData(nextWidth, nextHeight);
     this.camera.focalLength = Math.min(nextWidth, nextHeight) / 2;
+    // Invalidate the old frame before the resized one is committed: a late
+    // worker frame rendered at the previous size must not be drawn into
+    // the new ImageData or serve picks.
+    resizeFrameState(this.frameState, nextWidth, nextHeight);
     this.requestRender();
   }
 

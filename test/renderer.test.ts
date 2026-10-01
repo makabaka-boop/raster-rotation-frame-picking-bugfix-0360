@@ -131,6 +131,46 @@ describe('top-left pixel ownership', () => {
     expect(pixel(frame, 5, 5).id).toBe(0);
     expect(pixel(frame, 4, 4).id).toBe(0);
   });
+
+  it('owns diagonal shared-edge pixels independently of submission order', () => {
+    // Same square as above; the diagonal x = y passes exactly through
+    // pixel centers. The (0, 2, 1) triangle owns it in both orders:
+    // submitted as id 0 in `forward` and as id 1 in `swapped`.
+    const vertices = [
+      v(-4 / 3, -4 / 3, 2, [1, 0, 0]),
+      v(4 / 3, -4 / 3, 2, [0, 1, 0]),
+      v(4 / 3, 4 / 3, 2, [0, 0, 1]),
+      v(-4 / 3, 4 / 3, 2, [1, 1, 1]),
+    ];
+    const forward = renderFrame(8, 8, camera, mesh(vertices, [0, 2, 1, 0, 3, 2]));
+    const swapped = renderFrame(8, 8, camera, mesh(vertices, [0, 3, 2, 0, 2, 1]));
+
+    for (const p of [2, 3, 4, 5]) {
+      expect(pixel(forward, p, p).id).toBe(0);
+      expect(pixel(swapped, p, p).id).toBe(1);
+    }
+  });
+
+  it('owns horizontal shared-edge pixels independently of submission order', () => {
+    // Two quads stacked at screen y = 4.5, so the shared edge passes
+    // exactly through pixel centers. The upper triangle (0, 2, 3) owns
+    // the boundary row: id 1 in `forward`, id 3 in `swapped`.
+    const vertices = [
+      v(-4 / 3, -4 / 3, 2, [1, 0, 0]),
+      v(4 / 3, -4 / 3, 2, [1, 0, 0]),
+      v(4 / 3, 1 / 3, 2, [0, 1, 0]),
+      v(-4 / 3, 1 / 3, 2, [0, 1, 0]),
+      v(4 / 3, 4 / 3, 2, [0, 0, 1]),
+      v(-4 / 3, 4 / 3, 2, [0, 0, 1]),
+    ];
+    const forward = renderFrame(8, 8, camera, mesh(vertices, [0, 1, 2, 0, 2, 3, 3, 2, 4, 3, 4, 5]));
+    const swapped = renderFrame(8, 8, camera, mesh(vertices, [3, 2, 4, 3, 4, 5, 0, 1, 2, 0, 2, 3]));
+
+    for (const x of [2, 3, 4, 5]) {
+      expect(pixel(forward, x, 4).id).toBe(1);
+      expect(pixel(swapped, x, 4).id).toBe(3);
+    }
+  });
 });
 
 describe('perspective-correct color interpolation', () => {
@@ -162,6 +202,28 @@ describe('camera rotation and limits', () => {
 
     const rotated = renderFrame(8, 8, { ...camera, yaw: -Math.PI / 2 }, geometry);
     expect(rotated.primitiveId.some((id) => id === 0)).toBe(true);
+  });
+
+  it('matches the composed yaw-then-pitch transform under combined rotation', () => {
+    // yaw = pitch = 90° maps world (x, y, z) to camera (z, x, y), so the
+    // y = 2 plane becomes fronto-parallel at camera depth 2 and projects
+    // to screen (10, 8), (10, 10), (12, 9) with focal length 2.
+    const geometry = mesh(
+      [v(0, 2, 2, [1, 0, 0]), v(2, 2, 2, [0, 1, 0]), v(1, 2, 4, [0, 0, 1])],
+      [0, 1, 2],
+    );
+    const combined: Camera = {
+      position: [0, 0, 0],
+      yaw: Math.PI / 2,
+      pitch: Math.PI / 2,
+      focalLength: 2,
+    };
+    const frame = renderFrame(16, 16, combined, geometry);
+
+    expect(pixel(frame, 10, 8).id).toBe(0);
+    expect(pixel(frame, 10, 9).id).toBe(0);
+    closeTo(pixel(frame, 10, 8).depth, 2);
+    closeTo(pixel(frame, 10, 9).depth, 2);
   });
 
   it('enforces maximum frame and triangle counts', () => {

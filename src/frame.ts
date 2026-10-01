@@ -17,6 +17,19 @@ export function createFrameState(width: number, height: number): FrameCommitStat
   return { seq: 0, width, height, frame: null, lastError: null };
 }
 
+/**
+ * Synchronously invalidate the committed frame when the output size
+ * changes. Bumping the generation and recording the new dimensions right
+ * away guarantees a late worker response rendered at the old size can
+ * never be committed, drawn, or picked against the resized canvas.
+ */
+export function resizeFrameState(state: FrameCommitState, width: number, height: number): void {
+  state.seq += 1;
+  state.width = width;
+  state.height = height;
+  state.frame = null;
+}
+
 export function isFrameFor(frame: CommittedFrame | null, seq: number, width: number, height: number): boolean {
   return frame !== null && frame.seq === seq && frame.width === width && frame.height === height;
 }

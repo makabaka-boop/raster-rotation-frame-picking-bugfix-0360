@@ -47,8 +47,8 @@ function rotateWorldVector(v: Vec3, camera: Camera): Vec3 {
   //        camera z = sin pitch * world y + cos pitch * camera z(yaw)
   return [
     cy * v[0] + sy * v[2],
-    cp * v[1] - sp * sy * v[0] - sp * cy * v[2],
-    -sp * v[1] - cp * sy * v[0] + cp * cy * v[2],
+    cp * v[1] + sp * sy * v[0] - sp * cy * v[2],
+    sp * v[1] - cp * sy * v[0] + cp * cy * v[2],
   ];
 }
 
@@ -201,12 +201,16 @@ function rasterize(
   if (minX > maxX || minY > maxY) return;
 
   // For directed edge A->B, E(P) = (B-A) x (P-A). The positive-area
-  // interior has E >= 0. A horizontal right-going edge is a top edge; a
-  // vertical down-going edge is a left edge. Both include E === 0.
-  const topLeft = (p: RasterVertex, q: RasterVertex): boolean => q.y - p.y < 0 || (q.y === p.y && q.x - p.x > 0);
-  const abTopLeft = topLeft(a, b);
-  const bcTopLeft = topLeft(b, c);
-  const caTopLeft = topLeft(c, a);
+  // interior has E >= 0. An edge owns its E === 0 boundary pixels when it
+  // runs toward smaller y, or is horizontal and runs toward smaller x; the
+  // same edge traversed the other way then requires E >= EDGE_EPSILON.
+  // Every shared edge is therefore owned by exactly one of the two adjacent
+  // triangles, independent of submission order.
+  const ownsBoundary = (p: RasterVertex, q: RasterVertex): boolean =>
+    q.y - p.y < 0 || (q.y === p.y && q.x - p.x < 0);
+  const abOwned = ownsBoundary(a, b);
+  const bcOwned = ownsBoundary(b, c);
+  const caOwned = ownsBoundary(c, a);
 
   const abx = b.x - a.x;
   const aby = b.y - a.y;
@@ -224,9 +228,9 @@ function rasterize(
       const eca = cax * (py - c.y) - cay * (px - c.x);
 
       if (
-        eab < (abTopLeft ? 0 : -EDGE_EPSILON) ||
-        ebc < (bcTopLeft ? 0 : -EDGE_EPSILON) ||
-        eca < (caTopLeft ? 0 : -EDGE_EPSILON)
+        eab < (abOwned ? 0 : EDGE_EPSILON) ||
+        ebc < (bcOwned ? 0 : EDGE_EPSILON) ||
+        eca < (caOwned ? 0 : EDGE_EPSILON)
       ) {
         continue;
       }
