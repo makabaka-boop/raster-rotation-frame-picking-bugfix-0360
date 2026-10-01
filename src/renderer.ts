@@ -41,14 +41,14 @@ function rotateWorldVector(v: Vec3, camera: Camera): Vec3 {
   const cp = Math.cos(camera.pitch);
   const sp = Math.sin(camera.pitch);
 
-  // yaw: camera x = cos yaw * world x + sin yaw * world z
-  //      camera z = -sin yaw * world x + cos yaw * world z
+  // First apply yaw around world Y, then pitch around the camera's X axis.
   // pitch: camera y = cos pitch * world y - sin pitch * camera z(yaw)
   //        camera z = sin pitch * world y + cos pitch * camera z(yaw)
+  const zYaw = -sy * v[0] + cy * v[2];
   return [
     cy * v[0] + sy * v[2],
-    cp * v[1] - sp * sy * v[0] - sp * cy * v[2],
-    -sp * v[1] - cp * sy * v[0] + cp * cy * v[2],
+    cp * v[1] - sp * zYaw,
+    sp * v[1] + cp * zYaw,
   ];
 }
 
@@ -194,15 +194,15 @@ function rasterize(
     [b, c] = [c, b];
   }
 
-  const minX = Math.max(0, Math.floor(Math.min(a.x, b.x, c.x) + 0.5));
-  const maxX = Math.min(frame.width - 1, Math.ceil(Math.max(a.x, b.x, c.x) - 0.5));
-  const minY = Math.max(0, Math.floor(Math.min(a.y, b.y, c.y) + 0.5));
-  const maxY = Math.min(frame.height - 1, Math.ceil(Math.max(a.y, b.y, c.y) - 0.5));
+  const minX = Math.max(0, Math.ceil(Math.min(a.x, b.x, c.x) - 0.5));
+  const maxX = Math.min(frame.width - 1, Math.floor(Math.max(a.x, b.x, c.x) - 0.5));
+  const minY = Math.max(0, Math.ceil(Math.min(a.y, b.y, c.y) - 0.5));
+  const maxY = Math.min(frame.height - 1, Math.floor(Math.max(a.y, b.y, c.y) - 0.5));
   if (minX > maxX || minY > maxY) return;
 
-  // For directed edge A->B, E(P) = (B-A) x (P-A). The positive-area
-  // interior has E >= 0. A horizontal right-going edge is a top edge; a
-  // vertical down-going edge is a left edge. Both include E === 0.
+  // For directed edge A->B, E(P) = (B-A) x (P-A). A top/left edge owns a
+  // sampled center at E === 0; the opposite edge must reject it, preventing
+  // shared-edge ownership from depending on triangle submission order.
   const topLeft = (p: RasterVertex, q: RasterVertex): boolean => q.y - p.y < 0 || (q.y === p.y && q.x - p.x > 0);
   const abTopLeft = topLeft(a, b);
   const bcTopLeft = topLeft(b, c);
@@ -224,9 +224,9 @@ function rasterize(
       const eca = cax * (py - c.y) - cay * (px - c.x);
 
       if (
-        eab < (abTopLeft ? 0 : -EDGE_EPSILON) ||
-        ebc < (bcTopLeft ? 0 : -EDGE_EPSILON) ||
-        eca < (caTopLeft ? 0 : -EDGE_EPSILON)
+        eab < (abTopLeft ? -EDGE_EPSILON : EDGE_EPSILON) ||
+        ebc < (bcTopLeft ? -EDGE_EPSILON : EDGE_EPSILON) ||
+        eca < (caTopLeft ? -EDGE_EPSILON : EDGE_EPSILON)
       ) {
         continue;
       }

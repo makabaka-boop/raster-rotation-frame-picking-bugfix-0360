@@ -50,8 +50,8 @@ describe('near-plane clipping and perspective-correct interpolation', () => {
 
     expect(pixel(frame, 3, 3).id).toBe(-1);
 
-    // This fixture places the z=1 intersection exactly one sampled pixel
-    // center above its screen edge; its hand-computed depth is therefore 2.
+    // The sampled center on the non-owned bottom edge belongs to the
+    // triangle on its owned side; the center one row above remains covered.
     const exactClip = mesh(
       [
         v(0, -4, -2, [0, 0, 0]),
@@ -61,9 +61,8 @@ describe('near-plane clipping and perspective-correct interpolation', () => {
       [0, 2, 1],
     );
     const exactFrame = renderFrame(8, 8, camera, exactClip);
-    expect(pixel(exactFrame, 2, 2).id).toBe(0);
-    closeTo(pixel(exactFrame, 2, 2).depth, 2);
-    expect(pixel(exactFrame, 2, 2).rgb).toEqual([128, 255, 128]);
+    expect(pixel(exactFrame, 2, 1).id).toBe(0);
+    expect(pixel(exactFrame, 2, 2).id).toBe(-1);
   });
 
   it('rejects a triangle wholly behind z=1', () => {
@@ -130,6 +129,19 @@ describe('top-left pixel ownership', () => {
     expect(pixel(frame, 2, 6).id).toBe(-1);
     expect(pixel(frame, 5, 5).id).toBe(0);
     expect(pixel(frame, 4, 4).id).toBe(0);
+
+    const reversedGeometry = mesh(
+      [
+        v(-4 / 3, -4 / 3, 2, [1, 0, 0]),
+        v(4 / 3, -4 / 3, 2, [0, 1, 0]),
+        v(4 / 3, 4 / 3, 2, [0, 0, 1]),
+        v(-4 / 3, 4 / 3, 2, [1, 1, 1]),
+      ],
+      [0, 3, 2, 0, 2, 1],
+    );
+    const reversedFrame = renderFrame(8, 8, camera, reversedGeometry);
+    expect(pixel(reversedFrame, 4, 4).id).toBe(1);
+    expect(pixel(reversedFrame, 5, 5).id).toBe(1);
   });
 });
 
@@ -162,6 +174,27 @@ describe('camera rotation and limits', () => {
 
     const rotated = renderFrame(8, 8, { ...camera, yaw: -Math.PI / 2 }, geometry);
     expect(rotated.primitiveId.some((id) => id === 0)).toBe(true);
+  });
+
+  it('applies yaw and pitch as one composite camera rotation', () => {
+    const geometry = mesh(
+      [
+        v(-2, 0, 0, [1, 1, 1]),
+        v(-2, 4, -2, [1, 1, 1]),
+        v(-2, 4, 2, [1, 1, 1]),
+      ],
+      [0, 1, 2],
+    );
+
+    const frame = renderFrame(
+      8,
+      8,
+      { ...camera, yaw: Math.PI / 2, pitch: Math.PI / 4 },
+      geometry,
+    );
+
+    expect(pixel(frame, 4, 4).id).toBe(0);
+    expect(pixel(frame, 3, 4).id).toBe(0);
   });
 
   it('enforces maximum frame and triangle counts', () => {

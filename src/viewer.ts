@@ -99,6 +99,13 @@ export class TriangleViewer {
     this.canvas.height = nextHeight;
     this.imageData = this.ctx2d.createImageData(nextWidth, nextHeight);
     this.camera.focalLength = Math.min(nextWidth, nextHeight) / 2;
+
+    // The canvas has already changed size, so its old buffer cannot be
+    // picked until the frame for the new dimensions has committed.
+    this.frameState.width = nextWidth;
+    this.frameState.height = nextHeight;
+    this.frameState.frame = null;
+    this.frameState.lastError = null;
     this.requestRender();
   }
 
@@ -119,7 +126,13 @@ export class TriangleViewer {
   }
 
   private requestRender(): void {
-    if (this.disposed || this.renderQueued) return;
+    if (this.disposed) return;
+
+    // Reserve the generation synchronously. A late in-flight frame must be
+    // rejected even before the RAF callback posts the merged request.
+    this.frameState.seq += 1;
+
+    if (this.renderQueued) return;
     this.renderQueued = true;
     const schedule: (callback: () => void) => FrameRequestCallback | number =
       globalThis.requestAnimationFrame ??
@@ -129,11 +142,11 @@ export class TriangleViewer {
       this.renderQueued = false;
       if (this.disposed) return;
       const state = this.frameState;
-      state.seq += 1;
+      const seq = state.seq;
       state.width = this.width;
       state.height = this.height;
       this.worker.postMessage({
-        seq: state.seq,
+        seq,
         width: this.width,
         height: this.height,
         camera: this.camera,

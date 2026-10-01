@@ -21,6 +21,19 @@ export function isFrameFor(frame: CommittedFrame | null, seq: number, width: num
   return frame !== null && frame.seq === seq && frame.width === width && frame.height === height;
 }
 
+function hasFrameBufferLengths(
+  width: number,
+  height: number,
+  frame: Pick<RenderFrame, 'colors' | 'depth' | 'primitiveId'>,
+): boolean {
+  const pixelCount = width * height;
+  return (
+    frame.colors.length === pixelCount * 4 &&
+    frame.depth.length === pixelCount &&
+    frame.primitiveId.length === pixelCount
+  );
+}
+
 /**
  * Apply a worker response using the exact stale-frame rule. A response is
  * accepted only when its generation and dimensions are both current.
@@ -34,6 +47,8 @@ export function commitResponse(state: FrameCommitState, response: RenderResponse
   }
 
   if (response.width !== state.width || response.height !== state.height) return false;
+  if (!hasFrameBufferLengths(response.width, response.height, response)) return false;
+
   state.frame = createFrameSnapshot(
     response.seq,
     response.width,

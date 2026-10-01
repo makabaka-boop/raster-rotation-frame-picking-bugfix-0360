@@ -15,6 +15,16 @@ const response = (seq: number, width: number, height: number, id: number): Rende
   };
 };
 
+const malformedBufferResponse = (): RenderResponse => ({
+  type: 'frame',
+  seq: 2,
+  width: 3,
+  height: 2,
+  colors: new Uint8ClampedArray(2 * 2 * 4),
+  depth: new Float32Array(3 * 2),
+  primitiveId: new Int32Array(3 * 2),
+});
+
 describe('stale worker frame competition', () => {
   it('commits a current rotation response and then rejects a late response', () => {
     const state = createFrameState(2, 2);
@@ -44,5 +54,13 @@ describe('stale worker frame competition', () => {
 
     expect(commitResponse(state, response(2, 3, 2, 20))).toBe(true);
     expect(state.frame?.width).toBe(3);
+  });
+
+  it('rejects a current-size response whose color buffer has a stale length', () => {
+    const state = createFrameState(3, 2);
+    state.seq = 2;
+
+    expect(commitResponse(state, malformedBufferResponse())).toBe(false);
+    expect(state.frame).toBe(null);
   });
 });
